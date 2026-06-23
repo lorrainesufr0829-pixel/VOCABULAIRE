@@ -1,0 +1,29 @@
+body {
+    background: linear-gradient(135deg, #ffeaa7, #fab1a0);
+    font-family: "Comic Sans MS";
+    text-align: center;
+}
+
+.card {
+    width: 300px;
+    margin: auto;
+    background: white;
+    border: 3px solid black;
+    border-radius: 20px;
+    box-shadow: 6px 6px 0 black;
+    padding: 20px;
+}
+
+button {
+    margin: 5px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 2px solid black;
+    cursor: pointer;
+}
+
+.comic-img {
+    width: 100%;
+    margin-top: 10px;
+    border-radius: 10px;
+}
