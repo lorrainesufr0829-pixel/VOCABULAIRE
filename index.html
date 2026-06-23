@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>French Vocab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<h1>学不死 请往死里学</h1>
+
+<div id="card" class="card">
+    <h2 id="word">加载中...</h2>
+
+    <button onclick="showMeaning()">显示中文</button>
+    <p id="meaning" style="display:none;"></p>
+
+    <img id="comicImg" class="comic-img"/>
+
+    <div class="btns">
+        <button onclick="review('forgot')">❌ 宫里何时来了新人？</button>
+        <button onclick="review('unsure')">⚠️ 我去，好眼熟</button>
+        <button onclick="review('easy')">✔ 退下吧，朕记住了</button>
+    </div>
+</div>
+
+<a href="add.html">➕ 添加单词</a>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
