@@ -2,31 +2,409 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>French Vocab</title>
+<title>法语词汇小卖部 - 漫画式背单词</title>
 <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<h1>学不死 请往死里学</h1>
+<h1>🎨 学不死 请往死里学</h1>
 
+<!-- 统计信息 -->
+<div id="stats" style="margin-bottom: 20px; text-align: center;"></div>
+
+<!-- 进度 -->
+<div id="progress" style="margin: 10px 0; font-weight: bold;"></div>
+
+<!-- 单词卡 -->
 <div id="card" class="card">
     <h2 id="word">加载中...</h2>
 
-    <button onclick="showMeaning()">显示中文</button>
-    <p id="meaning" style="display:none;"></p>
+    <button onclick="showMeaning()">📖 显示中文</button>
+    <p id="meaning" style="display:none; font-size: 20px; color: #ff6b9d;"></p>
 
     <img id="comicImg" class="comic-img"/>
 
     <div class="btns">
-        <button onclick="review('forgot')">❌ 宫里何时来了新人？</button>
-        <button onclick="review('unsure')">⚠️ 我去，好眼熟</button>
-        <button onclick="review('easy')">✔ 退下吧，朕记住了</button>
+        <button onclick="review('forgot')">❌ 完全忘了</button>
+        <button onclick="review('unsure')">⚠️ 有点模糊</button>
+        <button onclick="review('easy')">✅ 记住了</button>
     </div>
 </div>
 
-<a href="add.html">➕ 添加单词</a>
+<!-- 控制按钮 -->
+<div style="text-align: center; margin-top: 20px;">
+    <button onclick="prevWord()" style="margin: 5px; padding: 10px 15px;">⬅ 上一个</button>
+    <button onclick="nextWord()" style="margin: 5px; padding: 10px 15px;">➡ 下一个</button>
+    <button onclick="refreshWords()" style="margin: 5px; padding: 10px 15px; background: #4ecdc4; color: white;">🔄 刷新</button>
+</div>
 
-<script type="module" src="app.js"></script>
+<!-- 导航 -->
+<div style="text-align: center; margin-top: 30px;">
+    <a href="add.html" style="margin: 10px; display: inline-block; padding: 10px 20px; background: #ffa502; color: white; border-radius: 10px; text-decoration: none;">➕ 添加单词</a>
+</div>
+
+<!-- 导入重构的代码 -->
+<script type="module">
+    // ==========================================
+    // 配置文件
+    // ==========================================
+    const SRS_CONFIG = {
+        INITIAL_EASE: 2.5,
+        MIN_EASE: 1.3,
+        EASE_ADJUST: 0.08,
+        EASE_BASE: 0.1,
+        DEFAULT_INTERVAL: 1
+    };
+
+    // ==========================================
+    // SRS 引擎 (SM-2 算法)
+    // ==========================================
+    
+    function calculateNextReview(record, difficulty) {
+        let { interval = 1, easeFactor = SRS_CONFIG.INITIAL_EASE, reviewCount = 0 } = record;
+        
+        if (difficulty < 0 || difficulty > 5) {
+            difficulty = 3;
+        }
+        
+        let newInterval;
+        let newEaseFactor;
+        
+        // ✅ 答对的情况
+        if (difficulty >= 3) {
+            if (reviewCount === 0) {
+                newInterval = 1;
+            } else if (reviewCount === 1) {
+                newInterval = 3;
+            } else {
+                newInterval = Math.round(interval * easeFactor);
+            }
+            
+            newEaseFactor = easeFactor + (
+                SRS_CONFIG.EASE_BASE - (5 - difficulty) * SRS_CONFIG.EASE_ADJUST
+            );
+            
+            newEaseFactor = Math.max(SRS_CONFIG.MIN_EASE, newEaseFactor);
+        }
+        // ❌ 答错的情况
+        else {
+            newInterval = 1;
+            newEaseFactor = Math.max(SRS_CONFIG.MIN_EASE, easeFactor - 0.2);
+        }
+        
+        const nextReviewDate = new Date();
+        nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
+        
+        return {
+            interval: newInterval,
+            easeFactor: parseFloat(newEaseFactor.toFixed(2)),
+            nextReviewDate: nextReviewDate.getTime(),
+            reviewCount: reviewCount + 1,
+            lastReviewDate: new Date().getTime()
+        };
+    }
+
+    // ==========================================
+    // 单词管理器
+    // ==========================================
+
+    class WordManager {
+        constructor() {
+            this.words = [];
+            this.currentIndex = 0;
+            this.isLoading = false;
+        }
+        
+        async loadWords() {
+            try {
+                this.isLoading = true;
+                const { db } = await import('./firebase.js');
+                const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                
+                const snap = await getDocs(collection(db, 'words'));
+                
+                this.words = snap.docs.map(d => ({
+                    id: d.id,
+                    ...d.data(),
+                    interval: d.data().interval || 1,
+                    easeFactor: d.data().easeFactor || d.data().ease || 2.5,
+                    reviewCount: d.data().reviewCount || 0,
+                    lastReviewDate: d.data().lastReviewDate || null,
+                    nextReviewDate: d.data().nextReviewDate || d.data().nextReview || new Date().getTime()
+                }));
+                
+                console.log(`✅ 加载了 ${this.words.length} 个单词`);
+                return this.words;
+            } catch (error) {
+                console.error('❌ 加载单词失败:', error);
+                return [];
+            } finally {
+                this.isLoading = false;
+            }
+        }
+        
+        getCurrentWord() {
+            if (this.words.length === 0) return null;
+            return this.words[this.currentIndex];
+        }
+        
+        nextWord() {
+            if (this.words.length === 0) return false;
+            this.currentIndex = (this.currentIndex + 1) % this.words.length;
+            return true;
+        }
+        
+        prevWord() {
+            if (this.words.length === 0) return false;
+            this.currentIndex = (this.currentIndex - 1 + this.words.length) % this.words.length;
+            return true;
+        }
+        
+        async updateWord(wordId, updates) {
+            try {
+                const { db } = await import('./firebase.js');
+                const { doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                
+                const wordRef = doc(db, 'words', wordId);
+                await updateDoc(wordRef, {
+                    ...updates,
+                    updatedAt: new Date().getTime()
+                });
+                
+                const index = this.words.findIndex(w => w.id === wordId);
+                if (index !== -1) {
+                    this.words[index] = { ...this.words[index], ...updates };
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('❌ 更新单词失败:', error);
+                return false;
+            }
+        }
+        
+        getStats() {
+            const now = new Date().getTime();
+            return {
+                total: this.words.length,
+                needsReview: this.words.filter(w => w.nextReviewDate <= now).length,
+                new: this.words.filter(w => !w.reviewCount || w.reviewCount === 0).length,
+                learning: this.words.filter(w => w.reviewCount > 0 && w.reviewCount < 5).length,
+                mastered: this.words.filter(w => w.reviewCount >= 5 && w.easeFactor > 2.5).length
+            };
+        }
+    }
+
+    const wordManager = new WordManager();
+
+    // ==========================================
+    // UI 辅助函数
+    // ==========================================
+
+    function displayWord(word) {
+        if (!word) {
+            document.getElementById('word').innerText = '没有单词';
+            return;
+        }
+        
+        document.getElementById('word').innerText = word.french;
+        document.getElementById('meaning').innerText = word.chinese;
+        document.getElementById('meaning').style.display = 'none';
+        
+        const img = document.getElementById('comicImg');
+        if (img && word.imageUrl) {
+            img.src = word.imageUrl;
+            img.style.display = 'block';
+        } else if (img) {
+            img.style.display = 'none';
+        }
+    }
+
+    function updateWordProgress() {
+        const total = wordManager.words.length;
+        const current = wordManager.currentIndex + 1;
+        const progressEl = document.getElementById('progress');
+        
+        if (progressEl) {
+            progressEl.innerText = `进度: ${current} / ${total}`;
+        }
+    }
+
+    function showNotification(message, type = 'info', duration = 3000) {
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.innerText = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+            color: white;
+            border-radius: 5px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-in;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, duration);
+    }
+
+    function updateStats(stats) {
+        const statsEl = document.getElementById('stats');
+        if (!statsEl) return;
+        
+        statsEl.innerHTML = `
+            <div class="stats-container">
+                <div class="stat">
+                    <span class="stat-label">总数:</span>
+                    <span class="stat-value">${stats.total}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">待复习:</span>
+                    <span class="stat-value">${stats.needsReview}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">掌握:</span>
+                    <span class="stat-value">${stats.mastered}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    function disableReviewButtons(disabled = true) {
+        const buttons = document.querySelectorAll('.btns button');
+        buttons.forEach(btn => btn.disabled = disabled);
+    }
+
+    // ==========================================
+    // 页面初始化
+    // ==========================================
+
+    async function init() {
+        console.log('🚀 应用启动中...');
+        
+        try {
+            await wordManager.loadWords();
+            
+            if (wordManager.words.length === 0) {
+                showNotification('📝 还没有单词，请先添加！', 'info');
+                document.getElementById('card').style.display = 'none';
+                return;
+            }
+            
+            displayWord(wordManager.getCurrentWord());
+            updateWordProgress();
+            updateStats(wordManager.getStats());
+            
+            console.log('✅ 应用启动成功');
+        } catch (error) {
+            console.error('❌ 初始化失败:', error);
+            showNotification('❌ 初始化失败，请刷新重试', 'error');
+        }
+    }
+
+    // ==========================================
+    // 全局函数
+    // ==========================================
+
+    window.showMeaning = function() {
+        const meaningEl = document.getElementById('meaning');
+        if (meaningEl) {
+            meaningEl.style.display = meaningEl.style.display === 'none' ? 'block' : 'none';
+        }
+    };
+
+    window.review = async function(resultType) {
+        const word = wordManager.getCurrentWord();
+        if (!word) return;
+        
+        disableReviewButtons(true);
+        
+        try {
+            let difficulty;
+            let message;
+            
+            switch (resultType) {
+                case 'forgot':
+                    difficulty = 0;
+                    message = '😅 没关系，再来一次！';
+                    break;
+                case 'unsure':
+                    difficulty = 3;
+                    message = '⚠️ 继续加油！';
+                    break;
+                case 'easy':
+                    difficulty = 5;
+                    message = '🎉 太棒了！';
+                    break;
+                default:
+                    difficulty = 3;
+            }
+            
+            const currentRecord = {
+                interval: word.interval,
+                easeFactor: word.easeFactor,
+                reviewCount: word.reviewCount
+            };
+            
+            const nextReview = calculateNextReview(currentRecord, difficulty);
+            
+            await wordManager.updateWord(word.id, nextReview);
+            
+            console.log(`✅ 已记录: ${word.french} (难度: ${difficulty}, 下次间隔: ${nextReview.interval}天)`);
+            
+            showNotification(message, 'success');
+            
+            wordManager.nextWord();
+            
+            setTimeout(() => {
+                displayWord(wordManager.getCurrentWord());
+                updateWordProgress();
+                updateStats(wordManager.getStats());
+                disableReviewButtons(false);
+            }, 500);
+            
+        } catch (error) {
+            console.error('❌ 复习记录失败:', error);
+            showNotification('❌ 保存失败，请重试', 'error');
+            disableReviewButtons(false);
+        }
+    };
+
+    window.prevWord = function() {
+        wordManager.prevWord();
+        displayWord(wordManager.getCurrentWord());
+        updateWordProgress();
+    };
+
+    window.nextWord = function() {
+        wordManager.nextWord();
+        displayWord(wordManager.getCurrentWord());
+        updateWordProgress();
+    };
+
+    window.refreshWords = async function() {
+        showNotification('🔄 刷新中...', 'info');
+        await wordManager.loadWords();
+        wordManager.currentIndex = 0;
+        displayWord(wordManager.getCurrentWord());
+        updateWordProgress();
+        updateStats(wordManager.getStats());
+        showNotification('✅ 刷新完成', 'success');
+    };
+
+    // 页面加载完成后初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+</script>
+
 </body>
 </html>
