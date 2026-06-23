@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Add Word</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<h1>➕ 添加法语单词</h1>
+
+<input id="french" placeholder="法语单词"><br>
+<input id="chinese" placeholder="中文意思"><br>
+
+<input type="file" id="image"><br>
+
+<button onclick="addWord()">保存</button>
+
+<a href="index.html">⬅ 返回</a>
+
+<script type="module" src="cloudinary.js"></script>
+<script type="module" src="firebase.js"></script>
+<script type="module">
+import { uploadImage } from "./cloudinary.js";
+import { db } from "./firebase.js";
+import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+window.addWord = async function () {
+
+    const french = document.getElementById("french").value;
+    const chinese = document.getElementById("chinese").value;
+    const file = document.getElementById("image").files[0];
+
+    let imageUrl = "";
+
+    if (file) {
+        imageUrl = await uploadImage(file);
+    }
+
+    await addDoc(collection(db, "words"), {
+        french,
+        chinese,
+        imageUrl,
+        interval: 1,
+        ease: 2.5,
+        nextReview: Date.now()
+    });
+
+    alert("保存成功！");
+};
+</script>
+
+</body>
+</html>
